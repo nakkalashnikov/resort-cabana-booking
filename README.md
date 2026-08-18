@@ -1,92 +1,63 @@
-# Cabana Deck
+# Resort Map — Code Test
 
-An interactive resort map for browsing and booking poolside cabanas — a REST API backend (.NET) and a React frontend, served together from one process.
+*You are creating the world's first interactive cabana booking website for luxury resorts. Our goal is to offer guests a seamless digital experience: browse an interactive map of the resort, see poolside cabanas availability in real time, and book their ideal lounging spot just steps from the pool—all with just a couple of clicks. This project integrates a visually-rich resort map with live cabana availability and booking, redefining poolside convenience for our guests. Map format and asset usage are described below.*
 
-![Resort map screenshot](screenshot.png)
+---
 
-## Quick start
+## Task
 
-**Prerequisites:** Docker (and Docker Compose, bundled with Docker Desktop / the `docker compose` CLI plugin)
+Build a webapp that displays the resort map and allows guests to book cabanas. The frontend should rely entirely on a RESTful API for all data.
 
-```
-docker compose up --build
-```
+- **Backend:** Provides a RESTful API that serves all information needed to display the interactive, bookable resort map and to handle cabana bookings.
+- **Frontend:** Provides an interactive resort map and enables cabana booking.
 
-Builds the frontend, publishes the backend, and serves everything — API, built frontend, map tile assets — from one container at `http://localhost:8080`. Open that URL in a browser.
+  - **Resort Map View:**
+    - Displays a visual map of the resort using tiles from `assets`.
+    - Map layout and cabana availability are rendered based on the API response.
+    - Legend:
+      - `W` = cabana
+      - `p` = pool
+      - `#` = path
+      - `c` = chalet
+      - `.` = empty space
 
-By default the container reads the `map.ascii` and `bookings.json` baked into the image. To run it against different files, mount them in and pass `--map`/`--bookings` as the container command:
+  - **Cabana Interaction:**
+    - When a guest clicks on a cabana (`W`):
+      - If the cabana is **available**, show a booking interface (1-step flow: prompt for room number and guest name). Show confirmation of booking and redirect back to map view.
+      - If the cabana is **unavailable**, display information that it's not available.
 
-```
-docker build -t cabana-deck .
-docker run -p 8080:8080 \
-  -v "$(pwd)/your-map.ascii:/app/your-map.ascii:ro" \
-  -v "$(pwd)/your-bookings.json:/app/your-bookings.json:ro" \
-  cabana-deck --map /app/your-map.ascii --bookings /app/your-bookings.json
-```
+  - **Booking Feedback:**
+    - Once a cabana is booked, update the map immediately to show that it is no longer available (e.g., use a distinct visual style for booked cabanas).
 
-(The same pattern works with `docker compose` — see the commented example in `docker-compose.yml`.)
+  - **Validation:** Booking is only allowed if room number and name match a current guest (validated via API using the bookings file).
 
-## How to use it
+The backend reads map layout and booking/guest data from files specified via CLI options: `--map <path-to-map>` (for the ASCII resort map; defaults to `map.ascii` in the working directory) and `--bookings <path-to-bookings>` (for bookings and guest information; defaults to `bookings.json` in the working directory).
+Be sure to use the provided example map (`map.ascii`) and bookings (`bookings.json`) files as the required format for your input files.
 
-- The map renders from the legend: `W` cabana, `p` pool, `#` path, `c` chalet, `.` empty space.
-- Click a **green** cabana to book it — enter a room number and guest name, confirm. The tile flips to booked immediately — that's the confirmation, no extra step.
-- Click a **terracotta** (booked) cabana to release it — enter the room number and guest name it was booked under. The map never shows *who* booked a cabana to a casual visitor; only the matching room+name (checked by the API) releases it.
-- A room number + guest name only books/releases a cabana if that pair matches a real guest in `bookings.json` — there's no separate login (see Design decisions below).
-- Each guest can hold one cabana at a time — release it before booking another.
+There is no need for persistent storage for cabana bookings—in-memory or session state on the backend is fine.
 
-## Running the tests
+No auth—assume that knowing room number and guest name is sufficient auth.
 
-Tests run on the host, not in Docker — need .NET SDK 10.0+ and Node.js 22+ locally for this part.
+The booking flow should end with a clear confirmation and the map visibly updated (booked cabana distinct). Errors (e.g. invalid room/name) should show a short, human-readable message.
 
-Backend (xUnit — map parsing, booking/cancel logic, full HTTP API):
+---
 
-```
-dotnet test backend.Tests/ResortMap.Api.Tests.csproj
-```
+## Deliverables
 
-Frontend (Vitest + React Testing Library — map rendering, book/error/cancel flows):
+- **Source code** in a git repository (please provide a link and make sure we have permissions to view/download code).
+- **README:** Please ensure your README is well-structured, concise, and clearly documents how to run and use your app.
+Readme should containt a short paragraph explaining your core design decisions and any trade-offs (e.g. why you structured the API/UI as you did, what you kept simple or skipped).
+- **Single entrypoint:** Provide a **single command** (e.g. `./run.sh`, `npm run start`, or `dotnet run`) that launches both backend and frontend together, so reviewers need only run one command from the project root. This starting command **must accept** the `--map <path>` and `--bookings <path>` arguments so reviewers can specify alternative map or bookings files at startup.
+- **AI-assisted workflow documentation:** Please include your AI workflow in `AI.md`. Which tools you used, what kind of prompts and how many steps it took. This will not be judged, but a topic we would like to discuss during the interview.
+- **Screenshot:** Please include a screenshot (in your repository, e.g., `screenshot.png`) showing your running solution (map view).
+- **Automated Tests:** Include automated tests covering core backend and frontend functionality. Tests should validate booking logic, REST API behavior, map updates, and UI responses to typical user actions. Document how to run all tests in the README.
+- **LLM use:** If you use an LLM or coding agent (which we encourage), include the key prompts or agent setup you used. We may ask detailed questions about both the solution and how you used the tooling.
 
-```
-cd frontend && npm install && npm test -- --run
-```
+---
 
-Both suites also run automatically in CI on every push/PR (`.github/workflows/ci.yml`).
+## General notes
 
-## Project layout
-
-```
-backend/           ASP.NET Core Web API — map parsing, in-memory booking state, REST endpoints, static file hosting
-backend.Tests/     xUnit unit + integration tests for the backend
-frontend/          Vite + React + TypeScript SPA, builds into backend/wwwroot
-assets/            Map tile art (provided) — served by the backend at /assets
-map.ascii          Default resort map
-bookings.json      Default guest roster (room number + name pairs) used to validate bookings
-Dockerfile         Single entrypoint: multi-stage build (frontend → backend → runtime)
-docker-compose.yml Convenience wrapper around `docker build`/`docker run`
-```
-
-## API
-
-- `GET /api/map` → `{ width, height, grid: string[], cabanas: [{id, row, col, available}] }` — never includes who booked a cabana, only whether it's available
-- `POST /api/bookings` `{ cabanaId, room, guestName }` → `200` on success, `400` if the guest isn't in the roster, `409` if the cabana is already booked *or* this guest already holds a different one, `404` if the cabana doesn't exist
-- `DELETE /api/bookings/{cabanaId}` `{ room, guestName }` → `200` on success, `400` if room/name don't match the existing booking, `409` if it isn't booked
-
-## Design decisions & trade-offs
-
-**Single process, single origin, single container.** The backend serves the built frontend (`wwwroot`) and the map tile `assets/` folder alongside the API, so there's one command, one port, and no CORS configuration to reason about. `docker compose up --build` is the one entrypoint — no separately-running local .NET/Node toolchain needed just to use the app.
-
-**In-memory booking state, no database.** Cabana availability lives in a dictionary seeded from the parsed map at startup and resets on restart — explicitly allowed by the brief, and the honest choice for a stateless demo instead of standing up persistence nobody asked for. `bookings.json` is a guest roster used only to *validate* a room+name pair, not a booking ledger.
-
-**One cabana per guest at a time.** A room+name pair identifies a single guest, and a guest holding several cabanas simultaneously isn't a real scenario — booking while already holding one is rejected (`409`) with a message telling them to release it first.
-
-**No real auth, but the client never gets to skip the check.** Per the brief, knowing a room number and guest name is treated as sufficient authorization to book *or* release a cabana. Concretely: the API is the only place that check happens — the frontend never caches or reuses a room/name pair to submit a release on the guest's behalf, and `GET /api/map` never reveals who booked a cabana. Releasing always means re-entering the room+name, exactly like booking does, so the model stays meaningful instead of becoming "whoever has the page open can cancel anyone's booking."
-
-**A side panel instead of a modal.** Clicking a cabana swaps the content of a persistent right-hand rail rather than opening an overlay — the map is never covered, and the whole interaction (see availability → book or release → confirmation) happens without navigating away or losing your place. This was deliberately validated as a UI/UX mockup before any of it was implemented.
-
-**Release/cancel endpoint beyond the literal spec.** The brief only asks for booking, but a booking flow without any way to undo a mistake felt incomplete, and the no-real-auth model extends naturally to it (same room+name check). Kept minimal on purpose — no admin view, no booking history.
-
-**What was kept simple / skipped:** no pagination or filtering (the map is small enough to render whole), no optimistic UI rollback beyond a plain error message on failure, no accessibility work beyond keyboard-operable cabana tiles and semantic buttons/labels, no visual distinction for map tiles beyond the legend's four types.
-
-## AI-assisted workflow
-
-See [AI.md](AI.md) for how this was built with Claude Code, including the planning and design steps taken before writing code.
+- **Languages:** Use **.NET and/or JavaScript/TypeScript** only. Other languages are not in scope.
+- Keep it simple; avoid over-engineering. Within that stack, any reasonable libraries or frameworks are fine as long as they are documented.
+- No real auth or persistent storage required—in-memory/session state for cabana bookings is enough.
+- When in doubt, assume we had a simple solution in mind; feel free to ask questions.
