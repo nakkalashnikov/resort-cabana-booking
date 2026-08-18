@@ -4,9 +4,10 @@ namespace ResortMap.Api.Tests;
 
 public static class Fixtures
 {
-    // Two cabanas: 1-1 and 1-2. A pool tile and a chalet tile are included
-    // so MapParser is exercised against every legend character, not just W.
-    public const string TinyMap = "....\n.WWc\n.pp.\n....";
+    // Three cabanas: 1-1, 1-2, 3-1 — three so the 2-cabana-per-guest limit can be exercised
+    // (book 2, the 3rd should be rejected). A pool tile and a chalet tile are included so
+    // MapParser is exercised against every legend character, not just W.
+    public const string TinyMap = "....\n.WWc\n.pp.\n.W..";
 
     public static List<Guest> Guests => new()
     {

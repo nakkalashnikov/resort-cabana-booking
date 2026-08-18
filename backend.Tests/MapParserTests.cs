@@ -18,9 +18,10 @@ public class MapParserTests
     {
         var (_, cabanas) = MapParser.Parse(Fixtures.TinyMap);
 
-        Assert.Equal(2, cabanas.Count);
+        Assert.Equal(3, cabanas.Count);
         Assert.Contains(cabanas, c => c.Id == "1-1" && c.Row == 1 && c.Col == 1);
         Assert.Contains(cabanas, c => c.Id == "1-2" && c.Row == 1 && c.Col == 2);
+        Assert.Contains(cabanas, c => c.Id == "3-1" && c.Row == 3 && c.Col == 1);
     }
 
     [Fact]

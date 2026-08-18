@@ -66,16 +66,40 @@ public class BookingServiceTests
     }
 
     [Fact]
-    public void TryBook_GuestAlreadyHoldingAnotherCabana_ReturnsGuestAlreadyHasCabana()
+    public void TryBook_UpToTheLimit_Succeeds()
+    {
+        var service = NewService();
+
+        var (first, _) = service.TryBook("1-1", "101", "Alice Smith");
+        var (second, _) = service.TryBook("1-2", "101", "Alice Smith");
+
+        Assert.Equal(BookingService.BookingOutcome.Success, first);
+        Assert.Equal(BookingService.BookingOutcome.Success, second);
+    }
+
+    [Fact]
+    public void TryBook_BeyondTheLimit_ReturnsGuestAtBookingLimit()
     {
         var service = NewService();
         service.TryBook("1-1", "101", "Alice Smith");
+        service.TryBook("1-2", "101", "Alice Smith");
 
-        var (outcome, cabana) = service.TryBook("1-2", "101", "Alice Smith");
+        var (outcome, cabana) = service.TryBook("3-1", "101", "Alice Smith");
 
-        Assert.Equal(BookingService.BookingOutcome.GuestAlreadyHasCabana, outcome);
+        Assert.Equal(BookingService.BookingOutcome.GuestAtBookingLimit, outcome);
         Assert.Null(cabana);
-        Assert.True(service.Cabanas.Single(c => c.Id == "1-2").Available);
+        Assert.True(service.Cabanas.Single(c => c.Id == "3-1").Available);
+    }
+
+    [Fact]
+    public void IsBookedBy_ReflectsOwnershipWithoutLeakingToOtherGuests()
+    {
+        var service = NewService();
+        service.TryBook("1-1", "101", "Alice Smith");
+        var cabana = service.Cabanas.Single(c => c.Id == "1-1");
+
+        Assert.True(service.IsBookedBy(cabana, "101", "Alice Smith"));
+        Assert.False(service.IsBookedBy(cabana, "102", "Bob Jones"));
     }
 
     [Fact]

@@ -5,6 +5,8 @@ namespace ResortMap.Api.Services;
 
 public class BookingService
 {
+    public const int MaxCabanasPerGuest = 2;
+
     private readonly string[] _grid;
     private readonly ConcurrentDictionary<string, Cabana> _cabanas;
     private readonly List<Guest> _guests;
@@ -22,9 +24,9 @@ public class BookingService
 
     public IReadOnlyCollection<Cabana> Cabanas => _cabanas.Values.ToList();
 
-    // Guards every read-check-write across TryBook/TryCancel. A per-cabana lock isn't enough
-    // once TryBook has to check state on OTHER cabanas too (one-cabana-per-guest), so this is
-    // a single coarse lock for the whole service instead — fine at this scale.
+    // Guards every read-check-write across TryBook/TryCancel — a per-cabana lock isn't enough
+    // once checks span multiple cabanas (booking limit), so this is a single coarse lock for
+    // the whole service instead — fine at this scale.
     private readonly object _lock = new();
 
     public enum BookingOutcome
@@ -33,7 +35,7 @@ public class BookingService
         CabanaNotFound,
         AlreadyBooked,
         GuestNotFound,
-        GuestAlreadyHasCabana
+        GuestAtBookingLimit
     }
 
     public enum CancelOutcome
@@ -44,8 +46,14 @@ public class BookingService
         GuestMismatch
     }
 
-    private static bool Matches(string? a, string b) =>
+    public static bool Matches(string? a, string b) =>
         string.Equals(a?.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    public bool IsValidGuest(string room, string guestName) =>
+        _guests.Any(g => Matches(g.Room, room) && Matches(g.GuestName, guestName));
+
+    public bool IsBookedBy(Cabana cabana, string room, string guestName) =>
+        !cabana.Available && Matches(cabana.BookedRoom, room) && Matches(cabana.BookedGuestName, guestName);
 
     public (BookingOutcome Outcome, Cabana? Cabana) TryBook(string cabanaId, string room, string guestName)
     {
@@ -61,22 +69,16 @@ public class BookingService
                 return (BookingOutcome.AlreadyBooked, cabana);
             }
 
-            var isValidGuest = _guests.Any(g => Matches(g.Room, room) && Matches(g.GuestName, guestName));
-
-            if (!isValidGuest)
+            if (!IsValidGuest(room, guestName))
             {
                 return (BookingOutcome.GuestNotFound, null);
             }
 
-            // One cabana per guest at a time — a room+name pair identifies a single guest,
-            // and a guest holding two cabanas simultaneously isn't a real scenario worth
-            // supporting just because the spec doesn't explicitly forbid it.
-            var alreadyHoldsACabana = _cabanas.Values.Any(c =>
-                !c.Available && Matches(c.BookedRoom, room) && Matches(c.BookedGuestName, guestName));
+            var heldCount = _cabanas.Values.Count(c => IsBookedBy(c, room, guestName));
 
-            if (alreadyHoldsACabana)
+            if (heldCount >= MaxCabanasPerGuest)
             {
-                return (BookingOutcome.GuestAlreadyHasCabana, null);
+                return (BookingOutcome.GuestAtBookingLimit, null);
             }
 
             cabana.Available = false;
@@ -100,9 +102,7 @@ public class BookingService
                 return (CancelOutcome.NotBooked, cabana);
             }
 
-            var matchesBooking = Matches(cabana.BookedRoom, room) && Matches(cabana.BookedGuestName, guestName);
-
-            if (!matchesBooking)
+            if (!IsBookedBy(cabana, room, guestName))
             {
                 return (CancelOutcome.GuestMismatch, null);
             }

@@ -41,14 +41,49 @@ public class ApiIntegrationTests : IDisposable
         Environment.SetEnvironmentVariable("bookings", null);
     }
 
+    private Task<MapDto?> GetMapAs(string room, string guestName) =>
+        _client.GetFromJsonAsync<MapDto>($"/api/map?room={Uri.EscapeDataString(room)}&guestName={Uri.EscapeDataString(guestName)}");
+
     [Fact]
-    public async Task GetMap_ReturnsSeededGridAndCabanas()
+    public async Task GetMap_WithoutCredentials_ReturnsBadRequest()
     {
-        var map = await _client.GetFromJsonAsync<MapDto>("/api/map");
+        var response = await _client.GetAsync("/api/map");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetMap_WithInvalidGuest_ReturnsBadRequest()
+    {
+        var response = await _client.GetAsync("/api/map?room=999&guestName=Nobody");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetMap_WithValidGuest_ReturnsSeededGridAndCabanas()
+    {
+        var map = await GetMapAs("101", "Alice Smith");
 
         Assert.NotNull(map);
-        Assert.Equal(2, map!.Cabanas.Length);
+        Assert.Equal(3, map!.Cabanas.Length);
         Assert.All(map.Cabanas, c => Assert.True(c.Available));
+        Assert.All(map.Cabanas, c => Assert.False(c.Mine));
+    }
+
+    [Fact]
+    public async Task GetMap_NeverRevealsWhoBookedACabanaToADifferentGuest()
+    {
+        await _client.PostAsJsonAsync("/api/bookings", new BookingRequest("1-1", "101", "Alice Smith"));
+
+        var mapForBob = await GetMapAs("102", "Bob Jones");
+        var booked = mapForBob!.Cabanas.Single(c => c.Id == "1-1");
+
+        Assert.False(booked.Available);
+        Assert.False(booked.Mine); // booked by Alice, viewer is Bob — must not read as "mine"
+
+        var mapForAlice = await GetMapAs("101", "Alice Smith");
+        Assert.True(mapForAlice!.Cabanas.Single(c => c.Id == "1-1").Mine);
     }
 
     [Fact]
@@ -59,9 +94,10 @@ public class ApiIntegrationTests : IDisposable
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var map = await _client.GetFromJsonAsync<MapDto>("/api/map");
+        var map = await GetMapAs("101", "Alice Smith");
         var booked = map!.Cabanas.Single(c => c.Id == "1-1");
         Assert.False(booked.Available);
+        Assert.True(booked.Mine);
     }
 
     [Fact]
@@ -85,16 +121,26 @@ public class ApiIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task PostBooking_GuestAlreadyHoldingAnotherCabana_ReturnsConflict()
+    public async Task PostBooking_UpToTheLimit_Succeeds()
+    {
+        var first = await _client.PostAsJsonAsync("/api/bookings", new BookingRequest("1-1", "101", "Alice Smith"));
+        var second = await _client.PostAsJsonAsync("/api/bookings", new BookingRequest("1-2", "101", "Alice Smith"));
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+    }
+
+    [Fact]
+    public async Task PostBooking_BeyondTheLimit_ReturnsConflictAndLeavesThirdCabanaAvailable()
     {
         await _client.PostAsJsonAsync("/api/bookings", new BookingRequest("1-1", "101", "Alice Smith"));
+        await _client.PostAsJsonAsync("/api/bookings", new BookingRequest("1-2", "101", "Alice Smith"));
 
-        var response = await _client.PostAsJsonAsync("/api/bookings",
-            new BookingRequest("1-2", "101", "Alice Smith"));
+        var third = await _client.PostAsJsonAsync("/api/bookings", new BookingRequest("3-1", "101", "Alice Smith"));
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        var map = await _client.GetFromJsonAsync<MapDto>("/api/map");
-        Assert.True(map!.Cabanas.Single(c => c.Id == "1-2").Available);
+        Assert.Equal(HttpStatusCode.Conflict, third.StatusCode);
+        var map = await GetMapAs("101", "Alice Smith");
+        Assert.True(map!.Cabanas.Single(c => c.Id == "3-1").Available);
     }
 
     [Fact]
@@ -110,7 +156,7 @@ public class ApiIntegrationTests : IDisposable
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var map = await _client.GetFromJsonAsync<MapDto>("/api/map");
+        var map = await GetMapAs("101", "Alice Smith");
         Assert.True(map!.Cabanas.Single(c => c.Id == "1-1").Available);
     }
 
@@ -127,7 +173,7 @@ public class ApiIntegrationTests : IDisposable
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
-        var map = await _client.GetFromJsonAsync<MapDto>("/api/map");
+        var map = await GetMapAs("101", "Alice Smith");
         Assert.False(map!.Cabanas.Single(c => c.Id == "1-1").Available);
     }
 }

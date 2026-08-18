@@ -15,6 +15,8 @@
   --accent-ink: #7a3520;
   --available: #4f7d4b;
   --available-soft: #dfe9d6;
+  --mine-soft: #cfe6e9;
+  --mine-ink: #12525d;
   --path-tile: #cdb488;
   --shadow: 0 1px 2px rgba(46, 42, 34, 0.06), 0 8px 20px -12px rgba(46, 42, 34, 0.18);
   --radius-s: 6px;
@@ -38,6 +40,8 @@
   --accent-ink: #f0b795;
   --available: #8bbf7f;
   --available-soft: #263427;
+  --mine-soft: #1f3a3d;
+  --mine-ink: #7fd6e6;
   --path-tile: #3c4e42;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.55);
 }
@@ -283,6 +287,9 @@ header.top {
 .cell.cabana.state-booked img {
   filter: saturate(0.7) brightness(0.92);
 }
+.cell.cabana.state-mine {
+  background: var(--mine-soft);
+}
 .cell.cabana:hover {
   transform: scale(1.12);
   z-index: 2;
@@ -307,6 +314,17 @@ header.top {
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--surface);
+}
+.cell.cabana.state-mine::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pool);
   box-shadow: 0 0 0 1.5px var(--surface);
 }
 
@@ -456,6 +474,10 @@ header.top {
   background: var(--accent-soft);
   color: var(--accent-ink);
 }
+.pill.mine {
+  background: var(--mine-soft);
+  color: var(--mine-ink);
+}
 
 .guest-card {
   background: var(--surface-2);
@@ -509,6 +531,25 @@ header.top {
 }
 .back-link:hover {
   text-decoration: underline;
+}
+
+.login-card {
+  max-width: 360px;
+  margin: 15vh auto 0;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow);
+  padding: 28px;
+}
+
+.login-title {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 500;
+  font-optical-sizing: auto;
+  font-size: 30px;
+  margin: 4px 0 12px;
+  letter-spacing: -0.01em;
 }
 
 @media (max-width: 880px) {

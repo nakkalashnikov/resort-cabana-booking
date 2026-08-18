@@ -1,18 +1,20 @@
-import type { MapDto } from '../api';
+import type { Identity, MapDto } from '../api';
 
-// Small enough to reason about at a glance: 2 cabanas (one booked, one free),
-// one pool tile, one chalet tile, one path tile — exercises every legend
-// character without depending on the shape of the real map.ascii.
+// Small enough to reason about at a glance: 3 cabanas (one free, one taken by
+// someone else, one taken by "me"), one pool tile, one chalet tile, one path
+// tile — exercises every legend character without depending on the shape of
+// the real map.ascii.
 export const sampleMap: MapDto = {
   width: 4,
-  height: 4,
-  grid: ['....', '.WWc', '.pp.', '.##.'],
+  height: 5,
+  grid: ['....', '.WWc', '.pp.', '.##.', '.W..'],
   cabanas: [
-    { id: '1-1', row: 1, col: 1, available: true },
-    // GET /api/map never returns who booked a cabana (only that it's unavailable) — the
-    // real backend keeps room/guestName private, so the fixture mirrors that on purpose.
-    { id: '1-2', row: 1, col: 2, available: false },
+    { id: '1-1', row: 1, col: 1, available: true, mine: false },
+    // GET /api/map never returns who booked a cabana someone else holds — only
+    // whether it's available and whether it's mine — the fixture mirrors that.
+    { id: '1-2', row: 1, col: 2, available: false, mine: false },
+    { id: '4-1', row: 4, col: 1, available: false, mine: true },
   ],
 };
 
-export const validGuest = { room: '102', guestName: 'Bob Jones' };
+export const identity: Identity = { room: '102', guestName: 'Bob Jones' };

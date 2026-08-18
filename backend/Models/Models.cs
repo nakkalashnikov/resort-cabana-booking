@@ -11,7 +11,7 @@ public record Cabana(string Id, int Row, int Col)
 
 public record MapDto(int Width, int Height, string[] Grid, CabanaDto[] Cabanas);
 
-public record CabanaDto(string Id, int Row, int Col, bool Available);
+public record CabanaDto(string Id, int Row, int Col, bool Available, bool Mine);
 
 public record BookingRequest(string CabanaId, string Room, string GuestName);
 

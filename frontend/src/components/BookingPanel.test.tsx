@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BookingPanel } from './BookingPanel';
-import { sampleMap } from '../test/fixtures';
+import { identity, sampleMap } from '../test/fixtures';
 import * as api from '../api';
 
 vi.mock('../api', async () => {
@@ -11,7 +11,8 @@ vi.mock('../api', async () => {
 });
 
 const availableCabana = sampleMap.cabanas[0]; // 1-1, available
-const bookedCabana = sampleMap.cabanas[1]; // 1-2, already booked (by "Alice Smith" / room 101 in the real fixture guest list)
+const takenByOtherCabana = sampleMap.cabanas[1]; // 1-2, booked, not mine
+const mineCabana = sampleMap.cabanas[2]; // 4-1, booked, mine
 
 beforeEach(() => {
   vi.mocked(api.postBooking).mockReset();
@@ -19,10 +20,11 @@ beforeEach(() => {
 });
 
 describe('BookingPanel — default state', () => {
-  it('shows available/booked counts and the hint when nothing is selected', () => {
+  it('shows available/booked counts and how many of mine are booked', () => {
     render(
       <BookingPanel
         cabanas={sampleMap.cabanas}
+        identity={identity}
         selected={null}
         onDeselect={() => {}}
         onBooked={() => {}}
@@ -31,19 +33,17 @@ describe('BookingPanel — default state', () => {
     );
 
     expect(screen.getByText('Pick a cabana')).toBeInTheDocument();
-    const availableRow = screen.getByText('Available now').closest('.summary-row');
-    expect(availableRow).toHaveTextContent('1');
-    const totalRow = screen.getByText('Total cabanas').closest('.summary-row');
-    expect(totalRow).toHaveTextContent('2');
+    const mineRow = screen.getByText('You have').closest('.summary-row');
+    expect(mineRow).toHaveTextContent('1/2');
   });
 });
 
 describe('BookingPanel — booking flow', () => {
-  it('books successfully with a valid room/name, confirms via onBooked, and returns to overview', async () => {
+  it('books in one click and returns to overview', async () => {
     vi.mocked(api.postBooking).mockResolvedValue({
       cabanaId: '1-1',
-      room: '102',
-      guestName: 'Bob Jones',
+      room: identity.room,
+      guestName: identity.guestName,
       confirmed: true,
     });
     const onBooked = vi.fn();
@@ -53,6 +53,7 @@ describe('BookingPanel — booking flow', () => {
     render(
       <BookingPanel
         cabanas={sampleMap.cabanas}
+        identity={identity}
         selected={availableCabana}
         onDeselect={onDeselect}
         onBooked={onBooked}
@@ -60,27 +61,22 @@ describe('BookingPanel — booking flow', () => {
       />,
     );
 
-    await user.type(screen.getByLabelText('Room number'), '102');
-    await user.type(screen.getByLabelText('Guest name'), 'Bob Jones');
     await user.click(screen.getByRole('button', { name: 'Confirm booking' }));
 
-    // Confirmation is the tile flipping on the map behind this panel (owned by
-    // the parent's state) — the panel itself just books and returns to overview.
-    expect(api.postBooking).toHaveBeenCalledWith('1-1', '102', 'Bob Jones');
-    expect(onBooked).toHaveBeenCalledWith('1-1', '102', 'Bob Jones');
+    expect(api.postBooking).toHaveBeenCalledWith('1-1', identity);
+    expect(onBooked).toHaveBeenCalledWith('1-1');
     expect(onDeselect).toHaveBeenCalled();
   });
 
-  it('shows an inline error and does not call onBooked when the guest is invalid', async () => {
-    vi.mocked(api.postBooking).mockRejectedValue(
-      new Error('No guest found with that room number and name.'),
-    );
+  it('shows an inline error and does not call onBooked when booking fails', async () => {
+    vi.mocked(api.postBooking).mockRejectedValue(new Error('You already have 2 cabanas booked.'));
     const onBooked = vi.fn();
     const user = userEvent.setup();
 
     render(
       <BookingPanel
         cabanas={sampleMap.cabanas}
+        identity={identity}
         selected={availableCabana}
         onDeselect={() => {}}
         onBooked={onBooked}
@@ -88,65 +84,100 @@ describe('BookingPanel — booking flow', () => {
       />,
     );
 
-    await user.type(screen.getByLabelText('Room number'), '999');
-    await user.type(screen.getByLabelText('Guest name'), 'Nobody');
     await user.click(screen.getByRole('button', { name: 'Confirm booking' }));
 
-    expect(await screen.findByText('No guest found with that room number and name.')).toBeInTheDocument();
+    expect(await screen.findByText('You already have 2 cabanas booked.')).toBeInTheDocument();
     expect(onBooked).not.toHaveBeenCalled();
+  });
+
+  it('offers no booking action once the guest is at the limit', () => {
+    const twoMineCabanas = [
+      availableCabana,
+      { ...takenByOtherCabana, mine: true },
+      mineCabana,
+    ];
+
+    render(
+      <BookingPanel
+        cabanas={twoMineCabanas}
+        identity={identity}
+        selected={availableCabana}
+        onDeselect={() => {}}
+        onBooked={() => {}}
+        onCancelled={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Confirm booking' })).not.toBeInTheDocument();
+    expect(screen.getByText(/You already have 2 cabanas booked/)).toBeInTheDocument();
   });
 });
 
-describe('BookingPanel — cancel flow', () => {
-  it('does not reveal who booked it, and requires matching room/name to release', async () => {
-    vi.mocked(api.cancelBooking).mockResolvedValue({ cabanaId: '1-2', released: true });
+describe('BookingPanel — a cabana taken by someone else', () => {
+  it('shows a plain message with no interactive booking/release action', () => {
+    render(
+      <BookingPanel
+        cabanas={sampleMap.cabanas}
+        identity={identity}
+        selected={takenByOtherCabana}
+        onDeselect={() => {}}
+        onBooked={() => {}}
+        onCancelled={() => {}}
+      />,
+    );
+
+    expect(screen.getByText('This cabana is taken')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /release/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  });
+});
+
+describe('BookingPanel — release flow (mine)', () => {
+  it('releases in one click and returns to overview', async () => {
+    vi.mocked(api.cancelBooking).mockResolvedValue({ cabanaId: '4-1', released: true });
     const onCancelled = vi.fn();
+    const onDeselect = vi.fn();
     const user = userEvent.setup();
 
     render(
       <BookingPanel
         cabanas={sampleMap.cabanas}
-        selected={bookedCabana}
-        onDeselect={() => {}}
+        identity={identity}
+        selected={mineCabana}
+        onDeselect={onDeselect}
         onBooked={() => {}}
         onCancelled={onCancelled}
       />,
     );
 
-    // Guest identity must not be shown just because a cabana is booked — only
-    // entering the matching room+name (verified server-side) should release it.
-    expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument();
+    expect(screen.getByText('This is your cabana')).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText('Room number'), '101');
-    await user.type(screen.getByLabelText('Guest name'), 'Alice Smith');
     await user.click(screen.getByRole('button', { name: 'Release cabana' }));
 
-    expect(api.cancelBooking).toHaveBeenCalledWith('1-2', '101', 'Alice Smith');
-    expect(onCancelled).toHaveBeenCalledWith('1-2');
+    expect(api.cancelBooking).toHaveBeenCalledWith('4-1', identity);
+    expect(onCancelled).toHaveBeenCalledWith('4-1');
+    expect(onDeselect).toHaveBeenCalled();
   });
 
-  it('shows an inline error and does not call onCancelled when room/name do not match', async () => {
-    vi.mocked(api.cancelBooking).mockRejectedValue(
-      new Error("Room number and guest name don't match this booking."),
-    );
+  it('shows an inline error when release fails', async () => {
+    vi.mocked(api.cancelBooking).mockRejectedValue(new Error('Something went wrong. Please try again.'));
     const onCancelled = vi.fn();
     const user = userEvent.setup();
 
     render(
       <BookingPanel
         cabanas={sampleMap.cabanas}
-        selected={bookedCabana}
+        identity={identity}
+        selected={mineCabana}
         onDeselect={() => {}}
         onBooked={() => {}}
         onCancelled={onCancelled}
       />,
     );
 
-    await user.type(screen.getByLabelText('Room number'), '101');
-    await user.type(screen.getByLabelText('Guest name'), 'Someone Else');
     await user.click(screen.getByRole('button', { name: 'Release cabana' }));
 
-    expect(await screen.findByText("Room number and guest name don't match this booking.")).toBeInTheDocument();
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeInTheDocument();
     expect(onCancelled).not.toHaveBeenCalled();
   });
 });

@@ -5,14 +5,16 @@ import { MapView } from './MapView';
 import { sampleMap } from '../test/fixtures';
 
 describe('MapView', () => {
-  it('renders one focusable cabana tile per cabana with the right available/booked state', () => {
+  it('renders one focusable cabana tile per cabana with the right available/booked/mine state', () => {
     render(<MapView map={sampleMap} selectedCabanaId={null} onSelectCabana={() => {}} />);
 
     const available = screen.getByRole('button', { name: 'Cabana 1-1, available' });
     const booked = screen.getByRole('button', { name: 'Cabana 1-2, booked' });
+    const mine = screen.getByRole('button', { name: 'Cabana 4-1, yours' });
 
     expect(available).toHaveClass('state-available');
     expect(booked).toHaveClass('state-booked');
+    expect(mine).toHaveClass('state-mine');
   });
 
   it('calls onSelectCabana with the cabana id when a tile is clicked', async () => {

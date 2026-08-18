@@ -1,16 +1,19 @@
 import { useState } from 'react';
-import type { CabanaDto } from '../api';
-import { cancelBooking, postBooking } from '../api';
+import type { CabanaDto, Identity } from '../api';
+import { cancelBooking, MAX_CABANAS_PER_GUEST, postBooking } from '../api';
 
 interface BookingPanelProps {
   cabanas: CabanaDto[];
+  identity: Identity;
   selected: CabanaDto | null;
   onDeselect: () => void;
-  onBooked: (cabanaId: string, room: string, guestName: string) => void;
+  onBooked: (cabanaId: string) => void;
   onCancelled: (cabanaId: string) => void;
 }
 
-export function BookingPanel({ cabanas, selected, onDeselect, onBooked, onCancelled }: BookingPanelProps) {
+export function BookingPanel({ cabanas, identity, selected, onDeselect, onBooked, onCancelled }: BookingPanelProps) {
+  const mineCount = cabanas.filter((c) => c.mine).length;
+
   if (!selected) {
     const available = cabanas.filter((c) => c.available).length;
     return (
@@ -27,59 +30,73 @@ export function BookingPanel({ cabanas, selected, onDeselect, onBooked, onCancel
             <span className="n" style={{ color: 'var(--accent-ink)' }}>{cabanas.length - available}</span>
           </div>
           <div className="summary-row">
-            <span>Total cabanas</span>
-            <span className="n">{cabanas.length}</span>
+            <span>You have</span>
+            <span className="n" style={{ color: 'var(--pool)' }}>{mineCount}/{MAX_CABANAS_PER_GUEST}</span>
           </div>
         </div>
-        <p className="hint">Click a cabana. Green books in one step; terracotta is taken, but can be released.</p>
+        <p className="hint">Click a cabana. Green books instantly; teal is yours and releases in one click; terracotta is someone else's.</p>
+      </aside>
+    );
+  }
+
+  if (selected.mine) {
+    return (
+      <aside className="rail">
+        <ReleaseAction cabana={selected} identity={identity} onDeselect={onDeselect} onCancelled={onCancelled} />
+      </aside>
+    );
+  }
+
+  if (!selected.available) {
+    return (
+      <aside className="rail">
+        <button className="back-link" type="button" onClick={onDeselect}>
+          &larr; Back to overview
+        </button>
+        <p className="rail-eyebrow">Cabana {selected.id}</p>
+        <span className="pill booked">Booked</span>
+        <h3 style={{ marginTop: 10 }}>This cabana is taken</h3>
+        <p className="hint">It's booked by another guest — nothing to do here.</p>
       </aside>
     );
   }
 
   return (
     <aside className="rail">
-      {selected.available ? (
-        <BookForm
-          cabana={selected}
-          onDeselect={onDeselect}
-          onBooked={(cabanaId, room, guestName) => {
-            onBooked(cabanaId, room, guestName);
-            // The tile flipping to "booked" on the map behind this panel is the
-            // confirmation — no separate screen to click through.
-            onDeselect();
-          }}
-        />
-      ) : (
-        <BookedDetails cabana={selected} onDeselect={onDeselect} onCancelled={onCancelled} />
-      )}
+      <BookAction
+        cabana={selected}
+        identity={identity}
+        atLimit={mineCount >= MAX_CABANAS_PER_GUEST}
+        onDeselect={onDeselect}
+        onBooked={onBooked}
+      />
     </aside>
   );
 }
 
-function BookForm({
+function BookAction({
   cabana,
+  identity,
+  atLimit,
   onDeselect,
   onBooked,
 }: {
   cabana: CabanaDto;
+  identity: Identity;
+  atLimit: boolean;
   onDeselect: () => void;
-  onBooked: (cabanaId: string, room: string, guestName: string) => void;
+  onBooked: (cabanaId: string) => void;
 }) {
-  const [room, setRoom] = useState('');
-  const [guestName, setGuestName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async () => {
-    if (!room.trim() || !guestName.trim()) {
-      setError('Enter both a room number and a guest name.');
-      return;
-    }
+  const handleBook = async () => {
     setSubmitting(true);
     setError(null);
     try {
-      await postBooking(cabana.id, room.trim(), guestName.trim());
-      onBooked(cabana.id, room.trim(), guestName.trim());
+      await postBooking(cabana.id, identity);
+      onBooked(cabana.id);
+      onDeselect();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
@@ -94,62 +111,43 @@ function BookForm({
       </button>
       <p className="rail-eyebrow">Cabana {cabana.id}</p>
       <span className="pill available">Available</span>
-      <h3 style={{ marginTop: 10 }}>Book this cabana</h3>
-      <div className="field">
-        <label htmlFor="fRoom">Room number</label>
-        <input
-          id="fRoom"
-          placeholder="e.g. 101"
-          autoComplete="off"
-          value={room}
-          onChange={(e) => setRoom(e.target.value)}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="fName">Guest name</label>
-        <input
-          id="fName"
-          placeholder="As on the reservation"
-          autoComplete="off"
-          value={guestName}
-          onChange={(e) => setGuestName(e.target.value)}
-        />
-      </div>
-      <button className="btn btn-primary" type="button" onClick={handleSubmit} disabled={submitting}>
-        {submitting ? 'Confirming…' : 'Confirm booking'}
-      </button>
+      <h3 style={{ marginTop: 10 }}>Book for {identity.guestName}?</h3>
+      <p className="hint" style={{ marginBottom: 14 }}>Room {identity.room}</p>
+      {atLimit ? (
+        <div className="error-note">
+          You already have {MAX_CABANAS_PER_GUEST} cabanas booked. Release one first.
+        </div>
+      ) : (
+        <button className="btn btn-primary" type="button" onClick={handleBook} disabled={submitting}>
+          {submitting ? 'Booking…' : 'Confirm booking'}
+        </button>
+      )}
       {error && <div className="error-note">{error}</div>}
     </>
   );
 }
 
-function BookedDetails({
+function ReleaseAction({
   cabana,
+  identity,
   onDeselect,
   onCancelled,
 }: {
   cabana: CabanaDto;
+  identity: Identity;
   onDeselect: () => void;
   onCancelled: (cabanaId: string) => void;
 }) {
-  const [room, setRoom] = useState('');
-  const [guestName, setGuestName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Releasing re-checks room+name against the API just like booking does — the panel never
-  // trusts locally-cached guest info as proof, since anyone with the page open could otherwise
-  // release someone else's cabana with a single click.
   const handleRelease = async () => {
-    if (!room.trim() || !guestName.trim()) {
-      setError('Enter both a room number and a guest name.');
-      return;
-    }
     setSubmitting(true);
     setError(null);
     try {
-      await cancelBooking(cabana.id, room.trim(), guestName.trim());
+      await cancelBooking(cabana.id, identity);
       onCancelled(cabana.id);
+      onDeselect();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
@@ -163,31 +161,9 @@ function BookedDetails({
         &larr; Back to overview
       </button>
       <p className="rail-eyebrow">Cabana {cabana.id}</p>
-      <span className="pill booked">Booked</span>
-      <h3 style={{ marginTop: 10 }}>This cabana is taken</h3>
-      <p className="hint" style={{ marginBottom: 14 }}>
-        Enter the room number and guest name it was booked under to release it.
-      </p>
-      <div className="field">
-        <label htmlFor="rRoom">Room number</label>
-        <input
-          id="rRoom"
-          placeholder="e.g. 101"
-          autoComplete="off"
-          value={room}
-          onChange={(e) => setRoom(e.target.value)}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="rName">Guest name</label>
-        <input
-          id="rName"
-          placeholder="As on the reservation"
-          autoComplete="off"
-          value={guestName}
-          onChange={(e) => setGuestName(e.target.value)}
-        />
-      </div>
+      <span className="pill mine">Yours</span>
+      <h3 style={{ marginTop: 10 }}>This is your cabana</h3>
+      <p className="hint" style={{ marginBottom: 14 }}>Booked for {identity.guestName}, room {identity.room}.</p>
       <button className="btn btn-danger" type="button" onClick={handleRelease} disabled={submitting}>
         {submitting ? 'Releasing…' : 'Release cabana'}
       </button>

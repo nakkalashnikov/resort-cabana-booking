@@ -50,14 +50,15 @@ export function MapView({ map, selectedCabanaId, onSelectCabana }: MapViewProps)
           if (ch === 'W') {
             const cabana = cabanaByCoord.get(key);
             if (!cabana) return <div key={key} className="cell empty" />;
-            const stateClass = cabana.available ? 'state-available' : 'state-booked';
+            const stateClass = cabana.mine ? 'state-mine' : cabana.available ? 'state-available' : 'state-booked';
+            const stateLabel = cabana.mine ? 'yours' : cabana.available ? 'available' : 'booked';
             const selectedClass = cabana.id === selectedCabanaId ? 'is-selected' : '';
             return (
               <button
                 key={key}
                 type="button"
                 className={`cell cabana ${stateClass} ${selectedClass}`}
-                aria-label={`Cabana ${cabana.id}, ${cabana.available ? 'available' : 'booked'}`}
+                aria-label={`Cabana ${cabana.id}, ${stateLabel}`}
                 onClick={() => onSelectCabana(cabana.id)}
               >
                 <img src="/assets/cabana.png" alt="" />

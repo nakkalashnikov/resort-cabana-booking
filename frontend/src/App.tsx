@@ -1,21 +1,25 @@
 import { useEffect, useState } from 'react';
-import type { MapDto } from './api';
+import type { Identity, MapDto } from './api';
 import { fetchMap } from './api';
 import { MapView } from './components/MapView';
 import { BookingPanel } from './components/BookingPanel';
+import { LoginGate } from './components/LoginGate';
 import { useTimeOfDayTheme } from './lib/useTimeOfDayTheme';
+import { clearIdentity, loadIdentity, saveIdentity } from './lib/session';
 
 export function App() {
+  const [identity, setIdentity] = useState<Identity | null>(() => loadIdentity());
   const [map, setMap] = useState<MapDto | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const theme = useTimeOfDayTheme();
 
   useEffect(() => {
-    fetchMap()
+    if (!identity) return;
+    fetchMap(identity)
       .then(setMap)
       .catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to load the map.'));
-  }, []);
+  }, [identity]);
 
   const patchCabana = (cabanaId: string, patch: Partial<MapDto['cabanas'][number]>) => {
     setMap((prev) => {
@@ -26,6 +30,24 @@ export function App() {
       };
     });
   };
+
+  const handleLogin = async (candidate: Identity) => {
+    const fetched = await fetchMap(candidate); // doubles as credential validation
+    saveIdentity(candidate);
+    setIdentity(candidate);
+    setMap(fetched);
+  };
+
+  const handleLogout = () => {
+    clearIdentity();
+    setIdentity(null);
+    setMap(null);
+    setSelectedId(null);
+  };
+
+  if (!identity) {
+    return <LoginGate onLogin={handleLogin} />;
+  }
 
   if (loadError) {
     return (
@@ -57,10 +79,13 @@ export function App() {
           <h1>Cabana Deck</h1>
         </div>
         <div className="top-meta">
-          {map.width} × {map.height} grid
+          {identity.guestName} · Room {identity.room}
           <br />
           <button className="theme-toggle" type="button" onClick={theme.cycle}>
             {themeIcon} {themeLabel}
+          </button>{' '}
+          <button className="theme-toggle" type="button" onClick={handleLogout}>
+            Log out
           </button>
         </div>
       </header>
@@ -91,6 +116,10 @@ export function App() {
               Cabana — available
             </div>
             <div className="legend-item">
+              <span className="legend-swatch" style={{ background: 'var(--mine-soft)' }} />
+              Cabana — yours
+            </div>
+            <div className="legend-item">
               <span className="legend-swatch" style={{ background: 'var(--accent-soft)' }} />
               Cabana — booked
             </div>
@@ -117,15 +146,11 @@ export function App() {
 
         <BookingPanel
           cabanas={map.cabanas}
+          identity={identity}
           selected={selectedCabana}
           onDeselect={() => setSelectedId(null)}
-          onBooked={(cabanaId) => {
-            patchCabana(cabanaId, { available: false });
-          }}
-          onCancelled={(cabanaId) => {
-            patchCabana(cabanaId, { available: true });
-            setSelectedId(null);
-          }}
+          onBooked={(cabanaId) => patchCabana(cabanaId, { available: false, mine: true })}
+          onCancelled={(cabanaId) => patchCabana(cabanaId, { available: true, mine: false })}
         />
       </div>
     </div>

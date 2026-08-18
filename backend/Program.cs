@@ -41,13 +41,24 @@ if (assetsDir is not null)
     });
 }
 
-app.MapGet("/api/map", (BookingService bookings) =>
+app.MapGet("/api/map", (string? room, string? guestName, BookingService bookings) =>
 {
+    if (string.IsNullOrWhiteSpace(room) || string.IsNullOrWhiteSpace(guestName))
+    {
+        return Results.BadRequest(new ErrorResponse("Room number and guest name are required."));
+    }
+
+    if (!bookings.IsValidGuest(room, guestName))
+    {
+        return Results.BadRequest(new ErrorResponse("No guest found with that room number and name."));
+    }
+
     var dto = new MapDto(
         bookings.Width,
         bookings.Height,
         bookings.Grid,
-        bookings.Cabanas.Select(c => new CabanaDto(c.Id, c.Row, c.Col, c.Available)).ToArray());
+        bookings.Cabanas.Select(c => new CabanaDto(
+            c.Id, c.Row, c.Col, c.Available, bookings.IsBookedBy(c, room, guestName))).ToArray());
     return Results.Ok(dto);
 });
 
@@ -68,8 +79,8 @@ app.MapPost("/api/bookings", (BookingRequest request, BookingService bookings) =
             new ErrorResponse("This cabana is already booked.")),
         BookingService.BookingOutcome.GuestNotFound => Results.BadRequest(
             new ErrorResponse("No guest found with that room number and name.")),
-        BookingService.BookingOutcome.GuestAlreadyHasCabana => Results.Conflict(
-            new ErrorResponse("This guest already has a cabana booked. Release it first to book another.")),
+        BookingService.BookingOutcome.GuestAtBookingLimit => Results.Conflict(
+            new ErrorResponse($"You already have {BookingService.MaxCabanasPerGuest} cabanas booked. Release one first.")),
         BookingService.BookingOutcome.CabanaNotFound => Results.NotFound(
             new ErrorResponse("Cabana not found.")),
         _ => Results.Problem("Unexpected error.")
