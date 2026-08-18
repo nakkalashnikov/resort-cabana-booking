@@ -1,0 +1,19 @@
+## .NET
+bin/
+obj/
+*.user
+
+## Node / frontend
+node_modules/
+dist/
+backend/wwwroot/
+
+## OS
+.DS_Store
+
+## Local tooling config (not part of the deliverable)
+.claude/
+
+## IDE
+.vs/
+.vscode/

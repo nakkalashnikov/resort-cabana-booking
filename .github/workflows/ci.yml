@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore backend.Tests/ResortMap.Api.Tests.csproj
+
+      - name: Build
+        run: dotnet build backend.Tests/ResortMap.Api.Tests.csproj --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test backend.Tests/ResortMap.Api.Tests.csproj --no-build --configuration Release --logger "trx;LogFileName=test-results.trx"
+
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: backend.Tests/TestResults/test-results.trx
+
+  frontend:
+    name: Frontend (React)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for frontend project
+        id: check
+        run: echo "exists=$( [ -f frontend/package.json ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node
+        if: steps.check.outputs.exists == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        if: steps.check.outputs.exists == 'true'
+        working-directory: frontend
+        run: npm ci
+
+      - name: Type check & lint
+        if: steps.check.outputs.exists == 'true'
+        working-directory: frontend
+        run: npm run lint --if-present
+
+      - name: Test
+        if: steps.check.outputs.exists == 'true'
+        working-directory: frontend
+        run: npm test -- --run
+
+      - name: Build
+        if: steps.check.outputs.exists == 'true'
+        working-directory: frontend
+        run: npm run build
