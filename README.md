@@ -6,48 +6,37 @@ An interactive resort map for browsing and booking poolside cabanas — a REST A
 
 ## Quick start
 
-**Prerequisites:** .NET SDK 10.0+, Node.js 22+
-
-```
-./run.sh
-```
-
-This builds the frontend and starts the backend on `http://localhost:5250` (see `backend/Properties/launchSettings.json`), serving the API, the built frontend, and the map tile assets from one origin. Open that URL in a browser.
-
-By default it reads `map.ascii` and `bookings.json` from the repo root. To use different files:
-
-```
-./run.sh --map path/to/your-map.ascii --bookings path/to/your-bookings.json
-```
-
-To pick a specific port, pass `--urls`:
-
-```
-./run.sh --urls http://localhost:5299
-```
-
-### Or with Docker
+**Prerequisites:** Docker (and Docker Compose, bundled with Docker Desktop / the `docker compose` CLI plugin)
 
 ```
 docker compose up --build
 ```
 
-Serves the same app at `http://localhost:8080`. To use custom map/bookings files, mount them and override the command — see the commented example in `docker-compose.yml`. Without Compose:
+Builds the frontend, publishes the backend, and serves everything — API, built frontend, map tile assets — from one container at `http://localhost:8080`. Open that URL in a browser.
+
+By default the container reads the `map.ascii` and `bookings.json` baked into the image. To run it against different files, mount them in and pass `--map`/`--bookings` as the container command:
 
 ```
 docker build -t cabana-deck .
-docker run -p 8080:8080 cabana-deck
+docker run -p 8080:8080 \
+  -v "$(pwd)/your-map.ascii:/app/your-map.ascii:ro" \
+  -v "$(pwd)/your-bookings.json:/app/your-bookings.json:ro" \
+  cabana-deck --map /app/your-map.ascii --bookings /app/your-bookings.json
 ```
+
+(The same pattern works with `docker compose` — see the commented example in `docker-compose.yml`.)
 
 ## How to use it
 
 - The map renders from the legend: `W` cabana, `p` pool, `#` path, `c` chalet, `.` empty space.
-- Click a **green** cabana to book it — enter a room number and guest name, confirm. The tile updates immediately and you'll see a confirmation.
+- Click a **green** cabana to book it — enter a room number and guest name, confirm. The tile flips to booked immediately — that's the confirmation, no extra step.
 - Click a **terracotta** (booked) cabana to release it — enter the room number and guest name it was booked under. The map never shows *who* booked a cabana to a casual visitor; only the matching room+name (checked by the API) releases it.
 - A room number + guest name only books/releases a cabana if that pair matches a real guest in `bookings.json` — there's no separate login (see Design decisions below).
 - Each guest can hold one cabana at a time — release it before booking another.
 
 ## Running the tests
+
+Tests run on the host, not in Docker — need .NET SDK 10.0+ and Node.js 22+ locally for this part.
 
 Backend (xUnit — map parsing, booking/cancel logic, full HTTP API):
 
@@ -72,8 +61,8 @@ frontend/          Vite + React + TypeScript SPA, builds into backend/wwwroot
 assets/            Map tile art (provided) — served by the backend at /assets
 map.ascii          Default resort map
 bookings.json      Default guest roster (room number + name pairs) used to validate bookings
-run.sh             Single entrypoint: builds the frontend, starts the backend
-Dockerfile         Multi-stage build (frontend → backend → runtime); alternative to run.sh
+Dockerfile         Single entrypoint: multi-stage build (frontend → backend → runtime)
+docker-compose.yml Convenience wrapper around `docker build`/`docker run`
 ```
 
 ## API
@@ -84,7 +73,7 @@ Dockerfile         Multi-stage build (frontend → backend → runtime); alterna
 
 ## Design decisions & trade-offs
 
-**Single process, single origin.** The backend serves the built frontend (`wwwroot`) and the map tile `assets/` folder alongside the API, so there's one command, one port, and no CORS configuration to reason about. The trade-off is a build step before the backend can serve anything useful in production mode — acceptable for a project this size, and `run.sh` (or the Dockerfile) hides it behind one command anyway.
+**Single process, single origin, single container.** The backend serves the built frontend (`wwwroot`) and the map tile `assets/` folder alongside the API, so there's one command, one port, and no CORS configuration to reason about. `docker compose up --build` is the one entrypoint — no separately-running local .NET/Node toolchain needed just to use the app.
 
 **In-memory booking state, no database.** Cabana availability lives in a dictionary seeded from the parsed map at startup and resets on restart — explicitly allowed by the brief, and the honest choice for a stateless demo instead of standing up persistence nobody asked for. `bookings.json` is a guest roster used only to *validate* a room+name pair, not a booking ledger.
 

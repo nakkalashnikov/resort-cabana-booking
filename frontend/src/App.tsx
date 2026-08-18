@@ -119,11 +119,11 @@ export function App() {
           cabanas={map.cabanas}
           selected={selectedCabana}
           onDeselect={() => setSelectedId(null)}
-          onBooked={(cabanaId, room, guestName) => {
-            patchCabana(cabanaId, { available: false, room, guestName });
+          onBooked={(cabanaId) => {
+            patchCabana(cabanaId, { available: false });
           }}
           onCancelled={(cabanaId) => {
-            patchCabana(cabanaId, { available: true, room: undefined, guestName: undefined });
+            patchCabana(cabanaId, { available: true });
             setSelectedId(null);
           }}
         />

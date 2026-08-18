@@ -11,36 +11,6 @@ interface BookingPanelProps {
 }
 
 export function BookingPanel({ cabanas, selected, onDeselect, onBooked, onCancelled }: BookingPanelProps) {
-  const [confirmedBooking, setConfirmedBooking] = useState<{ cabanaId: string; room: string; guestName: string } | null>(null);
-
-  if (selected && confirmedBooking?.cabanaId === selected.id) {
-    return (
-      <aside className="rail">
-        <p className="rail-eyebrow">Cabana {selected.id}</p>
-        <span className="pill booked">Confirmed</span>
-        <h3 style={{ marginTop: 10 }}>Booking confirmed</h3>
-        <div className="guest-card">
-          <span className="g-name">{confirmedBooking.guestName}</span>
-          <span className="g-room">Room {confirmedBooking.room}</span>
-        </div>
-        <p className="hint" style={{ marginBottom: 14 }}>
-          The map has been updated — this cabana now shows as booked. You can release it later by
-          returning to this cabana and entering the same room and name.
-        </p>
-        <button
-          className="btn btn-primary"
-          type="button"
-          onClick={() => {
-            setConfirmedBooking(null);
-            onDeselect();
-          }}
-        >
-          Back to overview
-        </button>
-      </aside>
-    );
-  }
-
   if (!selected) {
     const available = cabanas.filter((c) => c.available).length;
     return (
@@ -61,7 +31,7 @@ export function BookingPanel({ cabanas, selected, onDeselect, onBooked, onCancel
             <span className="n">{cabanas.length}</span>
           </div>
         </div>
-        <p className="hint">Click a cabana. Green books in one step; terracotta shows who's staying and lets you release it.</p>
+        <p className="hint">Click a cabana. Green books in one step; terracotta is taken, but can be released.</p>
       </aside>
     );
   }
@@ -74,7 +44,9 @@ export function BookingPanel({ cabanas, selected, onDeselect, onBooked, onCancel
           onDeselect={onDeselect}
           onBooked={(cabanaId, room, guestName) => {
             onBooked(cabanaId, room, guestName);
-            setConfirmedBooking({ cabanaId, room, guestName });
+            // The tile flipping to "booked" on the map behind this panel is the
+            // confirmation — no separate screen to click through.
+            onDeselect();
           }}
         />
       ) : (

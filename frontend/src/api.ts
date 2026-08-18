@@ -3,8 +3,6 @@ export interface CabanaDto {
   row: number;
   col: number;
   available: boolean;
-  room?: string;
-  guestName?: string;
 }
 
 export interface MapDto {

@@ -11,7 +11,7 @@ vi.mock('../api', async () => {
 });
 
 const availableCabana = sampleMap.cabanas[0]; // 1-1, available
-const bookedCabana = sampleMap.cabanas[1]; // 1-2, booked by Alice Smith / room 101
+const bookedCabana = sampleMap.cabanas[1]; // 1-2, already booked (by "Alice Smith" / room 101 in the real fixture guest list)
 
 beforeEach(() => {
   vi.mocked(api.postBooking).mockReset();
@@ -39,7 +39,7 @@ describe('BookingPanel — default state', () => {
 });
 
 describe('BookingPanel — booking flow', () => {
-  it('books successfully with a valid room/name and calls onBooked', async () => {
+  it('books successfully with a valid room/name, confirms via onBooked, and returns to overview', async () => {
     vi.mocked(api.postBooking).mockResolvedValue({
       cabanaId: '1-1',
       room: '102',
@@ -47,13 +47,14 @@ describe('BookingPanel — booking flow', () => {
       confirmed: true,
     });
     const onBooked = vi.fn();
+    const onDeselect = vi.fn();
     const user = userEvent.setup();
 
     render(
       <BookingPanel
         cabanas={sampleMap.cabanas}
         selected={availableCabana}
-        onDeselect={() => {}}
+        onDeselect={onDeselect}
         onBooked={onBooked}
         onCancelled={() => {}}
       />,
@@ -63,8 +64,11 @@ describe('BookingPanel — booking flow', () => {
     await user.type(screen.getByLabelText('Guest name'), 'Bob Jones');
     await user.click(screen.getByRole('button', { name: 'Confirm booking' }));
 
+    // Confirmation is the tile flipping on the map behind this panel (owned by
+    // the parent's state) — the panel itself just books and returns to overview.
     expect(api.postBooking).toHaveBeenCalledWith('1-1', '102', 'Bob Jones');
     expect(onBooked).toHaveBeenCalledWith('1-1', '102', 'Bob Jones');
+    expect(onDeselect).toHaveBeenCalled();
   });
 
   it('shows an inline error and does not call onBooked when the guest is invalid', async () => {
@@ -144,38 +148,5 @@ describe('BookingPanel — cancel flow', () => {
 
     expect(await screen.findByText("Room number and guest name don't match this booking.")).toBeInTheDocument();
     expect(onCancelled).not.toHaveBeenCalled();
-  });
-});
-
-describe('BookingPanel — post-booking confirmation', () => {
-  it('shows a confirmation with the details just entered, then returns to overview', async () => {
-    vi.mocked(api.postBooking).mockResolvedValue({
-      cabanaId: '1-1',
-      room: '102',
-      guestName: 'Bob Jones',
-      confirmed: true,
-    });
-    const onDeselect = vi.fn();
-    const user = userEvent.setup();
-
-    render(
-      <BookingPanel
-        cabanas={sampleMap.cabanas}
-        selected={availableCabana}
-        onDeselect={onDeselect}
-        onBooked={() => {}}
-        onCancelled={() => {}}
-      />,
-    );
-
-    await user.type(screen.getByLabelText('Room number'), '102');
-    await user.type(screen.getByLabelText('Guest name'), 'Bob Jones');
-    await user.click(screen.getByRole('button', { name: 'Confirm booking' }));
-
-    expect(await screen.findByText('Booking confirmed')).toBeInTheDocument();
-    expect(screen.getByText('Bob Jones')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Back to overview' }));
-    expect(onDeselect).toHaveBeenCalled();
   });
 });
