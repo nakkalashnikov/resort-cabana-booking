@@ -85,6 +85,19 @@ public class ApiIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task PostBooking_GuestAlreadyHoldingAnotherCabana_ReturnsConflict()
+    {
+        await _client.PostAsJsonAsync("/api/bookings", new BookingRequest("1-1", "101", "Alice Smith"));
+
+        var response = await _client.PostAsJsonAsync("/api/bookings",
+            new BookingRequest("1-2", "101", "Alice Smith"));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var map = await _client.GetFromJsonAsync<MapDto>("/api/map");
+        Assert.True(map!.Cabanas.Single(c => c.Id == "1-2").Available);
+    }
+
+    [Fact]
     public async Task DeleteBooking_MatchingGuest_ReleasesCabana()
     {
         await _client.PostAsJsonAsync("/api/bookings", new BookingRequest("1-1", "101", "Alice Smith"));

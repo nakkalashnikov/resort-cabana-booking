@@ -26,12 +26,26 @@ To pick a specific port, pass `--urls`:
 ./run.sh --urls http://localhost:5299
 ```
 
+### Or with Docker
+
+```
+docker compose up --build
+```
+
+Serves the same app at `http://localhost:8080`. To use custom map/bookings files, mount them and override the command — see the commented example in `docker-compose.yml`. Without Compose:
+
+```
+docker build -t cabana-deck .
+docker run -p 8080:8080 cabana-deck
+```
+
 ## How to use it
 
 - The map renders from the legend: `W` cabana, `p` pool, `#` path, `c` chalet, `.` empty space.
-- Click a **green** cabana to book it — enter a room number and guest name, confirm. The tile updates immediately.
-- Click a **terracotta** (booked) cabana to see who's staying there and release it.
+- Click a **green** cabana to book it — enter a room number and guest name, confirm. The tile updates immediately and you'll see a confirmation.
+- Click a **terracotta** (booked) cabana to release it — enter the room number and guest name it was booked under. The map never shows *who* booked a cabana to a casual visitor; only the matching room+name (checked by the API) releases it.
 - A room number + guest name only books/releases a cabana if that pair matches a real guest in `bookings.json` — there's no separate login (see Design decisions below).
+- Each guest can hold one cabana at a time — release it before booking another.
 
 ## Running the tests
 
@@ -59,21 +73,24 @@ assets/            Map tile art (provided) — served by the backend at /assets
 map.ascii          Default resort map
 bookings.json      Default guest roster (room number + name pairs) used to validate bookings
 run.sh             Single entrypoint: builds the frontend, starts the backend
+Dockerfile         Multi-stage build (frontend → backend → runtime); alternative to run.sh
 ```
 
 ## API
 
-- `GET /api/map` → `{ width, height, grid: string[], cabanas: [{id, row, col, available, room?, guestName?}] }`
-- `POST /api/bookings` `{ cabanaId, room, guestName }` → `200` on success, `400` if the guest isn't in the roster, `409` if already booked, `404` if the cabana doesn't exist
+- `GET /api/map` → `{ width, height, grid: string[], cabanas: [{id, row, col, available}] }` — never includes who booked a cabana, only whether it's available
+- `POST /api/bookings` `{ cabanaId, room, guestName }` → `200` on success, `400` if the guest isn't in the roster, `409` if the cabana is already booked *or* this guest already holds a different one, `404` if the cabana doesn't exist
 - `DELETE /api/bookings/{cabanaId}` `{ room, guestName }` → `200` on success, `400` if room/name don't match the existing booking, `409` if it isn't booked
 
 ## Design decisions & trade-offs
 
-**Single process, single origin.** The backend serves the built frontend (`wwwroot`) and the map tile `assets/` folder alongside the API, so there's one command, one port, and no CORS configuration to reason about. The trade-off is a build step before the backend can serve anything useful in production mode — acceptable for a project this size, and `run.sh` hides it behind one command anyway.
+**Single process, single origin.** The backend serves the built frontend (`wwwroot`) and the map tile `assets/` folder alongside the API, so there's one command, one port, and no CORS configuration to reason about. The trade-off is a build step before the backend can serve anything useful in production mode — acceptable for a project this size, and `run.sh` (or the Dockerfile) hides it behind one command anyway.
 
-**In-memory booking state, no database.** Cabana availability lives in a `ConcurrentDictionary` seeded from the parsed map at startup and resets on restart — explicitly allowed by the brief, and the honest choice for a stateless demo instead of standing up persistence nobody asked for. `bookings.json` is a guest roster used only to *validate* a room+name pair, not a booking ledger — a guest isn't "used up" after one booking, since nothing in the spec says a guest can only hold one cabana.
+**In-memory booking state, no database.** Cabana availability lives in a dictionary seeded from the parsed map at startup and resets on restart — explicitly allowed by the brief, and the honest choice for a stateless demo instead of standing up persistence nobody asked for. `bookings.json` is a guest roster used only to *validate* a room+name pair, not a booking ledger.
 
-**No real auth.** Per the brief, knowing a room number and guest name is treated as sufficient authorization to book *or* release a cabana — releasing checks the same pair against the cabana's current booking, so a guest can't release someone else's cabana by guessing an ID.
+**One cabana per guest at a time.** A room+name pair identifies a single guest, and a guest holding several cabanas simultaneously isn't a real scenario — booking while already holding one is rejected (`409`) with a message telling them to release it first.
+
+**No real auth, but the client never gets to skip the check.** Per the brief, knowing a room number and guest name is treated as sufficient authorization to book *or* release a cabana. Concretely: the API is the only place that check happens — the frontend never caches or reuses a room/name pair to submit a release on the guest's behalf, and `GET /api/map` never reveals who booked a cabana. Releasing always means re-entering the room+name, exactly like booking does, so the model stays meaningful instead of becoming "whoever has the page open can cancel anyone's booking."
 
 **A side panel instead of a modal.** Clicking a cabana swaps the content of a persistent right-hand rail rather than opening an overlay — the map is never covered, and the whole interaction (see availability → book or release → confirmation) happens without navigating away or losing your place. This was deliberately validated as a UI/UX mockup before any of it was implemented.
 

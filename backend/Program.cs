@@ -68,6 +68,8 @@ app.MapPost("/api/bookings", (BookingRequest request, BookingService bookings) =
             new ErrorResponse("This cabana is already booked.")),
         BookingService.BookingOutcome.GuestNotFound => Results.BadRequest(
             new ErrorResponse("No guest found with that room number and name.")),
+        BookingService.BookingOutcome.GuestAlreadyHasCabana => Results.Conflict(
+            new ErrorResponse("This guest already has a cabana booked. Release it first to book another.")),
         BookingService.BookingOutcome.CabanaNotFound => Results.NotFound(
             new ErrorResponse("Cabana not found.")),
         _ => Results.Problem("Unexpected error.")

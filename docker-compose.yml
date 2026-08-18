@@ -1,0 +1,10 @@
+services:
+  cabana-deck:
+    build: .
+    ports:
+      - "8080:8080"
+    # To use custom map/bookings files, mount them and override the command, e.g.:
+    # volumes:
+    #   - ./my-map.ascii:/app/my-map.ascii:ro
+    #   - ./my-bookings.json:/app/my-bookings.json:ro
+    # command: ["--map", "/app/my-map.ascii", "--bookings", "/app/my-bookings.json"]

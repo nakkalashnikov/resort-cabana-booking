@@ -22,12 +22,18 @@ public class BookingService
 
     public IReadOnlyCollection<Cabana> Cabanas => _cabanas.Values.ToList();
 
+    // Guards every read-check-write across TryBook/TryCancel. A per-cabana lock isn't enough
+    // once TryBook has to check state on OTHER cabanas too (one-cabana-per-guest), so this is
+    // a single coarse lock for the whole service instead — fine at this scale.
+    private readonly object _lock = new();
+
     public enum BookingOutcome
     {
         Success,
         CabanaNotFound,
         AlreadyBooked,
-        GuestNotFound
+        GuestNotFound,
+        GuestAlreadyHasCabana
     }
 
     public enum CancelOutcome
@@ -38,27 +44,39 @@ public class BookingService
         GuestMismatch
     }
 
+    private static bool Matches(string? a, string b) =>
+        string.Equals(a?.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
+
     public (BookingOutcome Outcome, Cabana? Cabana) TryBook(string cabanaId, string room, string guestName)
     {
-        if (!_cabanas.TryGetValue(cabanaId, out var cabana))
+        lock (_lock)
         {
-            return (BookingOutcome.CabanaNotFound, null);
-        }
+            if (!_cabanas.TryGetValue(cabanaId, out var cabana))
+            {
+                return (BookingOutcome.CabanaNotFound, null);
+            }
 
-        lock (cabana)
-        {
             if (!cabana.Available)
             {
                 return (BookingOutcome.AlreadyBooked, cabana);
             }
 
-            var isValidGuest = _guests.Any(g =>
-                string.Equals(g.Room.Trim(), room.Trim(), StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(g.GuestName.Trim(), guestName.Trim(), StringComparison.OrdinalIgnoreCase));
+            var isValidGuest = _guests.Any(g => Matches(g.Room, room) && Matches(g.GuestName, guestName));
 
             if (!isValidGuest)
             {
                 return (BookingOutcome.GuestNotFound, null);
+            }
+
+            // One cabana per guest at a time — a room+name pair identifies a single guest,
+            // and a guest holding two cabanas simultaneously isn't a real scenario worth
+            // supporting just because the spec doesn't explicitly forbid it.
+            var alreadyHoldsACabana = _cabanas.Values.Any(c =>
+                !c.Available && Matches(c.BookedRoom, room) && Matches(c.BookedGuestName, guestName));
+
+            if (alreadyHoldsACabana)
+            {
+                return (BookingOutcome.GuestAlreadyHasCabana, null);
             }
 
             cabana.Available = false;
@@ -70,21 +88,19 @@ public class BookingService
 
     public (CancelOutcome Outcome, Cabana? Cabana) TryCancel(string cabanaId, string room, string guestName)
     {
-        if (!_cabanas.TryGetValue(cabanaId, out var cabana))
+        lock (_lock)
         {
-            return (CancelOutcome.CabanaNotFound, null);
-        }
+            if (!_cabanas.TryGetValue(cabanaId, out var cabana))
+            {
+                return (CancelOutcome.CabanaNotFound, null);
+            }
 
-        lock (cabana)
-        {
             if (cabana.Available)
             {
                 return (CancelOutcome.NotBooked, cabana);
             }
 
-            var matchesBooking =
-                string.Equals(cabana.BookedRoom?.Trim(), room.Trim(), StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(cabana.BookedGuestName?.Trim(), guestName.Trim(), StringComparison.OrdinalIgnoreCase);
+            var matchesBooking = Matches(cabana.BookedRoom, room) && Matches(cabana.BookedGuestName, guestName);
 
             if (!matchesBooking)
             {

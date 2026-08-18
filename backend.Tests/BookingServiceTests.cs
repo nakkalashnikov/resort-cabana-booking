@@ -66,6 +66,19 @@ public class BookingServiceTests
     }
 
     [Fact]
+    public void TryBook_GuestAlreadyHoldingAnotherCabana_ReturnsGuestAlreadyHasCabana()
+    {
+        var service = NewService();
+        service.TryBook("1-1", "101", "Alice Smith");
+
+        var (outcome, cabana) = service.TryBook("1-2", "101", "Alice Smith");
+
+        Assert.Equal(BookingService.BookingOutcome.GuestAlreadyHasCabana, outcome);
+        Assert.Null(cabana);
+        Assert.True(service.Cabanas.Single(c => c.Id == "1-2").Available);
+    }
+
+    [Fact]
     public void TryCancel_MatchingRoomAndName_ReleasesCabana()
     {
         var service = NewService();

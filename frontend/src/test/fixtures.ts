@@ -9,7 +9,9 @@ export const sampleMap: MapDto = {
   grid: ['....', '.WWc', '.pp.', '.##.'],
   cabanas: [
     { id: '1-1', row: 1, col: 1, available: true },
-    { id: '1-2', row: 1, col: 2, available: false, room: '101', guestName: 'Alice Smith' },
+    // GET /api/map never returns who booked a cabana (only that it's unavailable) — the
+    // real backend keeps room/guestName private, so the fixture mirrors that on purpose.
+    { id: '1-2', row: 1, col: 2, available: false },
   ],
 };
 

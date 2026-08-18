@@ -94,7 +94,7 @@ describe('BookingPanel — booking flow', () => {
 });
 
 describe('BookingPanel — cancel flow', () => {
-  it('shows the guest card for a booked cabana and releases it on confirm', async () => {
+  it('does not reveal who booked it, and requires matching room/name to release', async () => {
     vi.mocked(api.cancelBooking).mockResolvedValue({ cabanaId: '1-2', released: true });
     const onCancelled = vi.fn();
     const user = userEvent.setup();
@@ -109,13 +109,73 @@ describe('BookingPanel — cancel flow', () => {
       />,
     );
 
-    expect(screen.getByText('Alice Smith')).toBeInTheDocument();
-    expect(screen.getByText('Room 101')).toBeInTheDocument();
+    // Guest identity must not be shown just because a cabana is booked — only
+    // entering the matching room+name (verified server-side) should release it.
+    expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument();
 
+    await user.type(screen.getByLabelText('Room number'), '101');
+    await user.type(screen.getByLabelText('Guest name'), 'Alice Smith');
     await user.click(screen.getByRole('button', { name: 'Release cabana' }));
-    await user.click(screen.getByRole('button', { name: 'Confirm release' }));
 
     expect(api.cancelBooking).toHaveBeenCalledWith('1-2', '101', 'Alice Smith');
     expect(onCancelled).toHaveBeenCalledWith('1-2');
+  });
+
+  it('shows an inline error and does not call onCancelled when room/name do not match', async () => {
+    vi.mocked(api.cancelBooking).mockRejectedValue(
+      new Error("Room number and guest name don't match this booking."),
+    );
+    const onCancelled = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <BookingPanel
+        cabanas={sampleMap.cabanas}
+        selected={bookedCabana}
+        onDeselect={() => {}}
+        onBooked={() => {}}
+        onCancelled={onCancelled}
+      />,
+    );
+
+    await user.type(screen.getByLabelText('Room number'), '101');
+    await user.type(screen.getByLabelText('Guest name'), 'Someone Else');
+    await user.click(screen.getByRole('button', { name: 'Release cabana' }));
+
+    expect(await screen.findByText("Room number and guest name don't match this booking.")).toBeInTheDocument();
+    expect(onCancelled).not.toHaveBeenCalled();
+  });
+});
+
+describe('BookingPanel — post-booking confirmation', () => {
+  it('shows a confirmation with the details just entered, then returns to overview', async () => {
+    vi.mocked(api.postBooking).mockResolvedValue({
+      cabanaId: '1-1',
+      room: '102',
+      guestName: 'Bob Jones',
+      confirmed: true,
+    });
+    const onDeselect = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <BookingPanel
+        cabanas={sampleMap.cabanas}
+        selected={availableCabana}
+        onDeselect={onDeselect}
+        onBooked={() => {}}
+        onCancelled={() => {}}
+      />,
+    );
+
+    await user.type(screen.getByLabelText('Room number'), '102');
+    await user.type(screen.getByLabelText('Guest name'), 'Bob Jones');
+    await user.click(screen.getByRole('button', { name: 'Confirm booking' }));
+
+    expect(await screen.findByText('Booking confirmed')).toBeInTheDocument();
+    expect(screen.getByText('Bob Jones')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back to overview' }));
+    expect(onDeselect).toHaveBeenCalled();
   });
 });
