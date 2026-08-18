@@ -1,8 +1,6 @@
 import type { CabanaDto, MapDto } from '../api';
 import { pathNeighbors, pathTile, PATH_ASSET_SRC } from '../lib/pathTiles';
 
-const TILE_SIZE = 26;
-
 interface MapViewProps {
   map: MapDto;
   selectedCabanaId: string | null;
@@ -18,7 +16,7 @@ export function MapView({ map, selectedCabanaId, onSelectCabana }: MapViewProps)
   return (
     <div
       className="grid"
-      style={{ gridTemplateColumns: `repeat(${map.width}, ${TILE_SIZE}px)` }}
+      style={{ gridTemplateColumns: `repeat(${map.width}, var(--tile-size))` }}
     >
       {map.grid.map((rowStr, row) =>
         rowStr.split('').map((ch, col) => {

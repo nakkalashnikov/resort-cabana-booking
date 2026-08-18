@@ -29,19 +29,19 @@ export function pathTile(n: PathNeighbors): PathTile {
   if (count >= 4) return { asset: 'crossing', rotationDeg: 0 };
 
   if (count === 3) {
-    if (!n.N) return { asset: 'split', rotationDeg: 180 };
-    if (!n.E) return { asset: 'split', rotationDeg: 270 };
-    if (!n.S) return { asset: 'split', rotationDeg: 0 };
-    return { asset: 'split', rotationDeg: 90 };
+    if (!n.N) return { asset: 'split', rotationDeg: 90 };
+    if (!n.E) return { asset: 'split', rotationDeg: 180 };
+    if (!n.S) return { asset: 'split', rotationDeg: 270 };
+    return { asset: 'split', rotationDeg: 0 };
   }
 
   if (count === 2) {
     if (n.N && n.S) return { asset: 'straight', rotationDeg: 0 };
     if (n.E && n.W) return { asset: 'straight', rotationDeg: 90 };
-    if (n.N && n.E) return { asset: 'corner', rotationDeg: 90 };
-    if (n.E && n.S) return { asset: 'corner', rotationDeg: 180 };
-    if (n.S && n.W) return { asset: 'corner', rotationDeg: 270 };
-    return { asset: 'corner', rotationDeg: 0 };
+    if (n.N && n.E) return { asset: 'corner', rotationDeg: 0 };
+    if (n.E && n.S) return { asset: 'corner', rotationDeg: 90 };
+    if (n.S && n.W) return { asset: 'corner', rotationDeg: 180 };
+    return { asset: 'corner', rotationDeg: 270 };
   }
 
   if (count === 1) {
