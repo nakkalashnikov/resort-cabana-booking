@@ -20,7 +20,7 @@ public class BookingService
     public int Height => _grid.Length;
     public string[] Grid => _grid;
 
-    public IReadOnlyCollection<Cabana> Cabanas => _cabanas.Values;
+    public IReadOnlyCollection<Cabana> Cabanas => _cabanas.Values.ToList();
 
     public enum BookingOutcome
     {
@@ -28,6 +28,14 @@ public class BookingService
         CabanaNotFound,
         AlreadyBooked,
         GuestNotFound
+    }
+
+    public enum CancelOutcome
+    {
+        Success,
+        CabanaNotFound,
+        NotBooked,
+        GuestMismatch
     }
 
     public (BookingOutcome Outcome, Cabana? Cabana) TryBook(string cabanaId, string room, string guestName)
@@ -57,6 +65,36 @@ public class BookingService
             cabana.BookedRoom = room;
             cabana.BookedGuestName = guestName;
             return (BookingOutcome.Success, cabana);
+        }
+    }
+
+    public (CancelOutcome Outcome, Cabana? Cabana) TryCancel(string cabanaId, string room, string guestName)
+    {
+        if (!_cabanas.TryGetValue(cabanaId, out var cabana))
+        {
+            return (CancelOutcome.CabanaNotFound, null);
+        }
+
+        lock (cabana)
+        {
+            if (cabana.Available)
+            {
+                return (CancelOutcome.NotBooked, cabana);
+            }
+
+            var matchesBooking =
+                string.Equals(cabana.BookedRoom?.Trim(), room.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(cabana.BookedGuestName?.Trim(), guestName.Trim(), StringComparison.OrdinalIgnoreCase);
+
+            if (!matchesBooking)
+            {
+                return (CancelOutcome.GuestMismatch, null);
+            }
+
+            cabana.Available = true;
+            cabana.BookedRoom = null;
+            cabana.BookedGuestName = null;
+            return (CancelOutcome.Success, cabana);
         }
     }
 }

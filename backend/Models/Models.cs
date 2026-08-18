@@ -17,4 +17,8 @@ public record BookingRequest(string CabanaId, string Room, string GuestName);
 
 public record BookingResponse(string CabanaId, string Room, string GuestName, bool Confirmed);
 
+public record CancelRequest(string Room, string GuestName);
+
+public record CancelResponse(string CabanaId, bool Released);
+
 public record ErrorResponse(string Error);

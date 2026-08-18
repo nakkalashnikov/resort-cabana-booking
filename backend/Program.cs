@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
 using ResortMap.Api.Models;
 using ResortMap.Api.Services;
 
@@ -68,6 +69,28 @@ app.MapPost("/api/bookings", (BookingRequest request, BookingService bookings) =
         BookingService.BookingOutcome.GuestNotFound => Results.BadRequest(
             new ErrorResponse("No guest found with that room number and name.")),
         BookingService.BookingOutcome.CabanaNotFound => Results.NotFound(
+            new ErrorResponse("Cabana not found.")),
+        _ => Results.Problem("Unexpected error.")
+    };
+});
+
+app.MapDelete("/api/bookings/{cabanaId}", (string cabanaId, [FromBody] CancelRequest request, BookingService bookings) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Room) || string.IsNullOrWhiteSpace(request.GuestName))
+    {
+        return Results.BadRequest(new ErrorResponse("Room number and guest name are required."));
+    }
+
+    var (outcome, _) = bookings.TryCancel(cabanaId, request.Room, request.GuestName);
+
+    return outcome switch
+    {
+        BookingService.CancelOutcome.Success => Results.Ok(new CancelResponse(cabanaId, true)),
+        BookingService.CancelOutcome.NotBooked => Results.Conflict(
+            new ErrorResponse("This cabana isn't booked.")),
+        BookingService.CancelOutcome.GuestMismatch => Results.BadRequest(
+            new ErrorResponse("Room number and guest name don't match this booking.")),
+        BookingService.CancelOutcome.CabanaNotFound => Results.NotFound(
             new ErrorResponse("Cabana not found.")),
         _ => Results.Problem("Unexpected error.")
     };
